@@ -1,6 +1,8 @@
 var game = {
   gameTimer: new Timer('1 seconds'),
 
+  timerSearchMatches: new Timer('300 miliseconds'),
+
   uiMovingY:null,
 
   uiSpaceingBetweenAxisX:null,
@@ -10,10 +12,13 @@ var game = {
   init:function(){
     game.changeColor()
     game.gameDuration()
+    game.configTimerForSearchMatchesToRemove()
     $(".btn-reinicio").click(function(){
       if ($(".btn-reinicio").text() == "Reiniciar"){
         $(".btn-reinicio").text("Iniciar")
         $("#timer").html("02:00")
+        $("#score-text").html("0")
+        $("#movimientos-text").html("0")
 
         if ($(".panel-score > h2:first-child").text("Juego Terminado").length > 0){
           $(".panel-tablero").animate({
@@ -43,6 +48,17 @@ var game = {
         game.fillBoard()
       }
     })
+    var oAddClass = $.fn.addClass;
+    $.fn.addClass = function () {
+        for (var i in arguments) {
+            var arg = arguments[i];
+            if ( !! (arg && arg.constructor && arg.call && arg.apply)) {
+                setTimeout(arg.bind(this));
+                delete arguments[i];
+            }
+        }
+        return oAddClass.apply(this, arguments);
+    }
   },
 
   changeColor:function(){
@@ -86,6 +102,7 @@ var game = {
       $("[class^='col-']").html("")
 
       game.gameTimer.reset()
+      game.timerSearchMatches.reset()
     })
   },
 
@@ -113,10 +130,10 @@ var game = {
   },
 
   fillBoard:function(){
-    var timex = new Timer("10 miliseconds")
+    var timex = new Timer("100 miliseconds")
     $("div[class^='col']").css("justify-content", "flex-start")
 
-    timex.every('10 miliseconds', function () {
+    timex.every('100 miliseconds', function () {
       $(".col-1").prepend(game.getImageRandom())
       $(".col-2").prepend(game.getImageRandom())
       $(".col-3").prepend(game.getImageRandom())
@@ -126,7 +143,7 @@ var game = {
       $(".col-7").prepend(game.getImageRandom())
     })
 
-    timex.after('70 miliseconds', function () {
+    timex.after('700 miliseconds', function () {
       timex.reset()
       game.gameTimer.start()
       $("div[class^='col']").css("justify-content", "flex-end")
@@ -137,9 +154,12 @@ var game = {
     })
 
     timex.start()
+
+    game.timerSearchMatches.start()
   },
 
   reviewMatches:function(){
+    //game.timerSearchMatches.stop()
     var cols = $("div[class^='col']")
     for (var i = 0; i< cols.length; i++){
       var col = cols[i]
@@ -154,13 +174,16 @@ var game = {
     $("div[class^='col']").css("justify-content", "flex-start")
 
     timex.every('10 miliseconds', function () {
-      $(obj).prepend(game.getImageRandom())
+      if ($(obj).children().length < 7){
+        $(obj).prepend(game.getImageRandom())
+      }
     })
 
     timex.after((7 - $(obj).children().length) + '0 miliseconds', function () {
       timex.reset()
       $("div[class^='col']").css("justify-content", "flex-end")
       game.configDragAndDrop()
+      //game.timerSearchMatches.start()
     })
 
     timex.start()
@@ -178,22 +201,16 @@ var game = {
         game.uiMovingY = ui.helper[0].y
         game.uiMovingX = ui.helper[0].x
         game.uiMovingSign = $(ui.helper[0])[0].outerHTML
+        //game.timerSearchMatches.stop()
+        game.setMovements()
+        game.setScore()
       }
     });
 
     $(".elemento").droppable({
       drop:function (event, ui){
-      	/*var moved = ui.draggable[0]
-      	var current = this*/
         var signed = this.outerHTML
         if ($(ui.draggable[0]).parent().attr("class") == $(this).parent().attr("class")){
-          /*if (game.uiMoving > $(this)[0].y){
-            $(this).insertBefore(moved)
-            $(ui.draggable[0]).insertBefore(current)
-          } else {
-            $(this).insertAfter(moved)
-            $(ui.draggable[0]).insertAfter(current)
-          }*/
             $(ui.draggable[0]).replaceWith(signed)
             $(this).replaceWith(game.uiMovingSign)
         } else {
@@ -201,11 +218,20 @@ var game = {
           $(this).replaceWith(game.uiMovingSign)
         }
         game.configDragAndDrop()
+        game.removeElements()
+        //game.timerSearchMatches.start()
       }
     });
   },
 
   removeElements:function(){
+    $(".animated").removeClass("animated")
+    $(".flash").removeClass("flash")
+
+    for (var i = 1; i < 8; i++) {
+      game.removeElementsInX(i)
+    }
+
     var cols = $("div[class^='col']")
     for (var v in cols) {
       if (cols[v].className) {
@@ -214,31 +240,93 @@ var game = {
         break
       }
     }
+    //game.timerSearchMatches.start()
   },
 
   removeElementsInY: function(className){
-    var lineaY = $(className).find("img")
-    var matched = $.map(lineaY, function(o, i) {
-      if (o.localName == "img") {
-        if ($(o).attr("src") == $(o).next().attr("src")) {
-          return { origin: o.id, sibling: $(o).next().attr("id") }
-        }
+    var root = 1, son, sis;
+
+    for (son = root + 1, sis = root + 2; root < 8 || son < 7 || sis < 6; sis++, son++){
+      if ($("." + className).find("img:nth-child(" + root + ")").attr("src") == $("." + className).find("img:nth-child(" + son + ")").attr("src") &&
+          $("." + className).find("img:nth-child(" + root + ")").attr("src") == $("." + className).find("img:nth-child(" + sis + ")").attr("src")) {
+        $("." + className).find("img:nth-child(" + root + ")").addClass("animated flash", function(){
+          var yupi=$(this)
+          setTimeout(function(){
+            $(yupi).remove()
+            game.reviewMatches()
+            game.setScore()
+          }, 600)
+        })
+        $("." + className).find("img:nth-child(" + son + ")").addClass("animated flash", function(){
+          var yupi=$(this)
+          setTimeout(function(){
+            $(yupi).remove()
+            game.reviewMatches()
+            game.setScore()
+          }, 600)
+        })
+        $("." + className).find("img:nth-child(" + sis + ")").addClass("animated flash", function(){
+          var yupi=$(this)
+          setTimeout(function(){
+            $(yupi).remove()
+            game.reviewMatches()
+            game.setScore()
+          }, 600)
+        })
+      } else {
+        root++
       }
-    })
-    for(var t in matched) {
-      $("#" + matched[t].origin).remove()
-      $("#" + matched[t].sibling).remove()
     }
   },
 
   removeElementsInX:function(index){
-    var match = []
-    if ($(".col-1").find("img:nth-child(" + index + ")").attr("src") == $(".col-2").find("img:nth-child(" + index + ")").attr("src")) {
-      $(".col-1").find("img:nth-child(" + index + ")").remove()
+    var root = 1, son, sis;
+
+    for (son = root + 1, sis = root + 2; root < 8 || son < 7 || sis < 6; sis++, son++){
+      if ($(".col-" + root).find("img:nth-child(" + index + ")").attr("src") == $(".col-" + son).find("img:nth-child(" + index + ")").attr("src") &&
+          $(".col-" + root).find("img:nth-child(" + index + ")").attr("src") == $(".col-" + sis).find("img:nth-child(" + index + ")").attr("src")) {
+        $(".col-" + root).find("img:nth-child(" + index + ")").addClass("animated flash", function(){
+          var yupi=$(this)
+          setTimeout(function(){
+            $(yupi).remove()
+            game.setScore()
+            game.reviewMatches()
+          }, 600)
+        })
+        $(".col-" + son).find("img:nth-child(" + index + ")").addClass("animated flash", function(){
+          var yupi=$(this)
+          setTimeout(function(){
+            $(yupi).remove()
+            game.setScore()
+            game.reviewMatches()
+          }, 600)
+        })
+        $(".col-" + sis).find("img:nth-child(" + index + ")").addClass("animated flash", function(){
+          var yupi=$(this)
+          setTimeout(function(){
+            $(yupi).remove()
+            game.setScore()
+            game.reviewMatches()
+          }, 600)
+        })
+      } else {
+        root++
+      }
     }
-    if ($(".col-2").find("img:nth-child(" + index + ")").attr("src") == $(".col-3").find("img:nth-child(" + index + ")").attr("src")) {
-      match.push($(".col-1").find("img:nth-child(" + index + ")").attr("id"))
-    }
+  },
+
+  configTimerForSearchMatchesToRemove:function(){
+    game.timerSearchMatches.every('1 seconds', function () {
+      game.removeElements()
+    })
+  },
+
+  setScore:function(){
+    $("#score-text").text(parseInt($("#score-text").text()) + 1)
+  },
+
+  setMovements:function(){
+    $("#movimientos-text").text(parseInt($("#movimientos-text").text()) + 1)
   }
 }
 
